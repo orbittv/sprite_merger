@@ -25,6 +25,9 @@ class SpriteMergerApp:
         btn_delete = tk.Button(top_frame, text="Удалить выбранный", command=self.delete_sprite, font=("Arial", 10), bg="#f44336", fg="white", padx=10, pady=5)
         btn_delete.pack(side=tk.LEFT, padx=10)
         
+        btn_edit = tk.Button(top_frame, text="Редактировать выбранный", command=self.edit_sprite, font=("Arial", 10), bg="#FF9800", fg="white", padx=10, pady=5)
+        btn_edit.pack(side=tk.LEFT, padx=10)
+        
         # Middle Frame - Treeview
         mid_frame = tk.Frame(self.root)
         mid_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
@@ -84,9 +87,9 @@ class SpriteMergerApp:
             
         self.open_add_dialog(file_path)
         
-    def open_add_dialog(self, file_path):
+    def open_add_dialog(self, file_path, edit_index=None, edit_item=None):
         dlg = tk.Toplevel(self.root)
-        dlg.title("Добавление спрайта и предпросмотр")
+        dlg.title("Редактирование спрайта" if edit_index is not None else "Добавление спрайта и предпросмотр")
         dlg.geometry("1280x1024")
         dlg.grab_set() # Make modal
         
@@ -162,15 +165,18 @@ class SpriteMergerApp:
         inputs_frame.pack(fill=tk.X)
         
         tk.Label(inputs_frame, text="Кол-во строк:", font=("Arial", 10)).grid(row=0, column=0, padx=5, pady=10, sticky=tk.W)
-        rows_var = tk.IntVar(value=1)
+        r_val = self.sprites[edit_index]["rows"] if edit_index is not None else 1
+        rows_var = tk.IntVar(value=r_val)
         tk.Entry(inputs_frame, textvariable=rows_var, width=10, font=("Arial", 10)).grid(row=0, column=1, padx=5, pady=10)
         
         tk.Label(inputs_frame, text="Кол-во столбцов:", font=("Arial", 10)).grid(row=1, column=0, padx=5, pady=10, sticky=tk.W)
-        cols_var = tk.IntVar(value=1)
+        c_val = self.sprites[edit_index]["cols"] if edit_index is not None else 1
+        cols_var = tk.IntVar(value=c_val)
         tk.Entry(inputs_frame, textvariable=cols_var, width=10, font=("Arial", 10)).grid(row=1, column=1, padx=5, pady=10)
         
         tk.Label(inputs_frame, text="Коэф. масштаба:", font=("Arial", 10)).grid(row=2, column=0, padx=5, pady=10, sticky=tk.W)
-        scale_var = tk.DoubleVar(value=1.0)
+        s_val = self.sprites[edit_index]["scale"] if edit_index is not None else 1.0
+        scale_var = tk.DoubleVar(value=s_val)
         tk.Entry(inputs_frame, textvariable=scale_var, width=10, font=("Arial", 10)).grid(row=2, column=1, padx=5, pady=10)
         
         def update_preview(reset_frame=True):
@@ -257,21 +263,43 @@ class SpriteMergerApp:
                 if r <= 0 or c <= 0 or s <= 0:
                     raise ValueError("Значения должны быть больше 0")
                 
-                # Add to structure and treeview
-                self.sprites.append({
-                    "path": file_path,
-                    "rows": r,
-                    "cols": c,
-                    "scale": s
-                })
-                self.tree.insert("", tk.END, values=(file_path, r, c, s))
+                if edit_index is not None:
+                    self.sprites[edit_index]["rows"] = r
+                    self.sprites[edit_index]["cols"] = c
+                    self.sprites[edit_index]["scale"] = s
+                    self.tree.item(edit_item, values=(file_path, r, c, s))
+                else:
+                    self.sprites.append({
+                        "path": file_path,
+                        "rows": r,
+                        "cols": c,
+                        "scale": s
+                    })
+                    self.tree.insert("", tk.END, values=(file_path, r, c, s))
                 dlg.destroy()
                 
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Некорректные параметры: {e}")
                 
-        btn_confirm = tk.Button(right_frame, text="Добавить в список", command=confirm, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), padx=20, pady=10)
+        btn_text = "Сохранить изменения" if edit_index is not None else "Добавить в список"
+        btn_confirm = tk.Button(right_frame, text=btn_text, command=confirm, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), padx=20, pady=10)
         btn_confirm.pack(side=tk.BOTTOM, pady=20)
+        
+    def edit_sprite(self):
+        selected_items = self.tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Внимание", "Выберите элемент для редактирования")
+            return
+            
+        if len(selected_items) > 1:
+            messagebox.showwarning("Внимание", "Выберите только один элемент")
+            return
+            
+        item = selected_items[0]
+        index = self.tree.index(item)
+        sprite_info = self.sprites[index]
+        self.open_add_dialog(sprite_info["path"], edit_index=index, edit_item=item)
+
         
     def delete_sprite(self):
         selected_items = self.tree.selection()
