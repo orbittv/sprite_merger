@@ -28,6 +28,9 @@ class SpriteMergerApp:
         btn_edit = tk.Button(top_frame, text="Редактировать выбранный", command=self.edit_sprite, font=("Arial", 10), bg="#FF9800", fg="white", padx=10, pady=5)
         btn_edit.pack(side=tk.LEFT, padx=10)
         
+        btn_sync = tk.Button(top_frame, text="Синхронизировать масштаб по 1-й строке", command=self.sync_scales, font=("Arial", 10, "bold"), bg="#9C27B0", fg="white", padx=10, pady=5)
+        btn_sync.pack(side=tk.LEFT, padx=10)
+        
         # Middle Frame - Treeview
         mid_frame = tk.Frame(self.root)
         mid_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
@@ -311,6 +314,62 @@ class SpriteMergerApp:
             index = self.tree.index(item)
             self.sprites.pop(index)
             self.tree.delete(item)
+
+    def get_max_useful_height(self, sprite_info, scale=1.0):
+        try:
+            img = Image.open(sprite_info["path"]).convert("RGBA")
+        except Exception:
+            return 0
+            
+        r = sprite_info["rows"]
+        c = sprite_info["cols"]
+        total = r * c
+        frame_w = img.width // c
+        frame_h = img.height // r
+        
+        max_h = 0
+        for i in range(total):
+            s_col = i % c
+            s_row = i // c
+            frame_img = img.crop((s_col * frame_w, s_row * frame_h, (s_col + 1) * frame_w, (s_row + 1) * frame_h))
+            alpha = frame_img.split()[-1]
+            bbox = alpha.getbbox()
+            if bbox:
+                h = bbox[3] - bbox[1]
+                if h > max_h:
+                    max_h = h
+                    
+        return max_h * scale
+
+    def sync_scales(self):
+        if len(self.sprites) < 2:
+            messagebox.showwarning("Внимание", "Для синхронизации нужно добавить как минимум 2 спрайтшита!")
+            return
+            
+        # 1. Get reference max height from the first row
+        ref_sprite = self.sprites[0]
+        ref_h = self.get_max_useful_height(ref_sprite, scale=ref_sprite["scale"])
+        
+        if ref_h <= 0:
+            messagebox.showerror("Ошибка", "Первый спрайтшит пустой или некорректный. Невозможно вычислить эталонную высоту.")
+            return
+            
+        # 2. Update scales for the rest
+        updated_count = 0
+        for i in range(1, len(self.sprites)):
+            sprite_info = self.sprites[i]
+            curr_h = self.get_max_useful_height(sprite_info, scale=1.0) # unscaled
+            
+            if curr_h > 0:
+                new_scale = round(ref_h / curr_h, 3)
+                self.sprites[i]["scale"] = new_scale
+                
+                # Update treeview
+                item_id = self.tree.get_children()[i]
+                self.tree.item(item_id, values=(sprite_info["path"], sprite_info["rows"], sprite_info["cols"], new_scale))
+                updated_count += 1
+                
+        messagebox.showinfo("Успех", f"Масштабы успешно синхронизированы для {updated_count} спрайтшитов!")
 
     def save_sprite(self):
         if not self.sprites:
