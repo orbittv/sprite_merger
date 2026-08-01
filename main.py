@@ -494,9 +494,21 @@ class SpriteMergerApp:
                             resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
                             frame_img = frame_img.resize(new_size, resample_filter)
                         
-                        # Calculate center position in the output cell
-                        pos_x = col_idx * out_w + (out_w - frame_img.width) // 2
-                        pos_y = row_idx * out_h + (out_h - frame_img.height) // 2
+                        # Get bbox to align the useful image
+                        alpha = frame_img.split()[-1]
+                        bbox = alpha.getbbox()
+                        
+                        if bbox:
+                            # Горизонтально: центрируем именно полезное изображение (bbox)
+                            bbox_w = bbox[2] - bbox[0]
+                            pos_x = col_idx * out_w + (out_w - bbox_w) // 2 - bbox[0]
+                            
+                            # Вертикально: выравниваем полезное изображение по низу кадра с отступом 20 px
+                            pos_y = row_idx * out_h + out_h - 20 - bbox[3]
+                        else:
+                            # Если кадр пустой (полностью прозрачный)
+                            pos_x = col_idx * out_w + (out_w - frame_img.width) // 2
+                            pos_y = row_idx * out_h + (out_h - frame_img.height) // 2
                         
                         # Paste into result using the frame itself as a mask to preserve transparency
                         result_img.paste(frame_img, (pos_x, pos_y), frame_img)
