@@ -31,6 +31,9 @@ class SpriteMergerApp:
         btn_sync = tk.Button(top_frame, text="Синхронизировать масштаб по 1-й строке", command=self.sync_scales, font=("Arial", 10, "bold"), bg="#9C27B0", fg="white", padx=10, pady=5)
         btn_sync.pack(side=tk.LEFT, padx=10)
         
+        btn_manual_scale = tk.Button(top_frame, text="Подгонка scale", command=self.open_manual_scale_dialog, font=("Arial", 10, "bold"), bg="#E91E63", fg="white", padx=10, pady=5)
+        btn_manual_scale.pack(side=tk.LEFT, padx=10)
+        
         # Middle Frame - Treeview
         mid_frame = tk.Frame(self.root)
         mid_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
@@ -328,6 +331,148 @@ class SpriteMergerApp:
         index = self.tree.index(item)
         sprite_info = self.sprites[index]
         self.open_add_dialog(sprite_info["path"], edit_index=index, edit_item=item)
+
+    def open_manual_scale_dialog(self):
+        selected_items = self.tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Внимание", "Выберите элемент для подгонки")
+            return
+            
+        selected_item = selected_items[0]
+        selected_index = self.tree.index(selected_item)
+        
+        if selected_index == 0:
+            messagebox.showwarning("Внимание", "Выбран первый элемент, он является эталоном. Выберите другой элемент из списка.")
+            return
+            
+        if len(self.sprites) < 2:
+            messagebox.showwarning("Внимание", "Для подгонки нужно как минимум два спрайтшита в списке.")
+            return
+
+        ref_sprite = self.sprites[0]
+        tgt_sprite = self.sprites[selected_index]
+        
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Ручная подгонка scale")
+        dlg.geometry("1280x1024")
+        dlg.grab_set()
+        
+        # Center the dialog
+        self.root.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 640
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 512
+        dlg.geometry(f"+{x}+{y}")
+        
+        # Layout
+        top_label = tk.Label(dlg, text="Слева — эталон (1-я строка), справа — настраиваемый спрайт", font=("Arial", 14, "bold"), pady=10)
+        top_label.pack()
+        
+        canvas_frame = tk.Frame(dlg, bg="#222")
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=20)
+        
+        cv_w, cv_h = 600, 800
+        cv_ref = tk.Canvas(canvas_frame, width=cv_w, height=cv_h, bg="#333", relief=tk.SUNKEN, bd=2)
+        cv_ref.pack(side=tk.LEFT, padx=10, pady=10, expand=True)
+        
+        cv_tgt = tk.Canvas(canvas_frame, width=cv_w, height=cv_h, bg="#333", relief=tk.SUNKEN, bd=2)
+        cv_tgt.pack(side=tk.RIGHT, padx=10, pady=10, expand=True)
+        
+        # Draw floor line
+        floor_y = cv_h - 20
+        cv_ref.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
+        cv_tgt.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
+        
+        # Labels on canvas
+        cv_ref.create_text(cv_w // 2, 30, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
+        
+        # Store photo images to prevent garbage collection
+        dlg.photo_ref = None
+        dlg.photo_tgt = None
+        
+        def render_sprite(canvas, sprite_info, current_scale, is_ref=False):
+            try:
+                img = Image.open(sprite_info["path"]).convert("RGBA")
+            except Exception:
+                return
+                
+            r = sprite_info["rows"]
+            c = sprite_info["cols"]
+            
+            src_frame_w = img.width // c
+            src_frame_h = img.height // r
+            
+            # Crop first frame
+            frame_img = img.crop((0, 0, src_frame_w, src_frame_h))
+            
+            # Scale
+            if current_scale != 1.0:
+                new_size = (int(src_frame_w * current_scale), int(src_frame_h * current_scale))
+                resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+                frame_img = frame_img.resize(new_size, resample_filter)
+                
+            alpha = frame_img.split()[-1]
+            bbox = alpha.getbbox()
+            
+            # Clear old image (tag "sprite")
+            canvas.delete("sprite")
+            
+            if bbox:
+                bbox_w = bbox[2] - bbox[0]
+                pos_x = cv_w // 2 - bbox_w // 2 - bbox[0]
+                pos_y = (cv_h - 20) - bbox[3]
+                
+                disp_img = Image.new("RGBA", (cv_w, cv_h), (0, 0, 0, 0))
+                disp_img.paste(frame_img, (pos_x, pos_y), frame_img)
+                
+                photo = ImageTk.PhotoImage(disp_img)
+                
+                if is_ref:
+                    dlg.photo_ref = photo
+                    canvas.create_image(0, 0, image=dlg.photo_ref, anchor=tk.NW, tags="sprite")
+                else:
+                    dlg.photo_tgt = photo
+                    canvas.create_image(0, 0, image=dlg.photo_tgt, anchor=tk.NW, tags="sprite")
+                    # Update label
+                    canvas.delete("tgt_label")
+                    canvas.create_text(cv_w // 2, 30, text=f"Настраиваемый (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="tgt_label")
+            else:
+                if not is_ref:
+                    canvas.delete("tgt_label")
+                    canvas.create_text(cv_w // 2, 30, text=f"Пустой кадр (Scale: {current_scale:.3f})", fill="red", font=("Arial", 14, "bold"), tags="tgt_label")
+                    
+        # Render reference once
+        render_sprite(cv_ref, ref_sprite, ref_sprite["scale"], is_ref=True)
+        
+        # Bottom controls
+        bottom_frame = tk.Frame(dlg, pady=20)
+        bottom_frame.pack(fill=tk.X)
+        
+        tk.Label(bottom_frame, text="Scale:", font=("Arial", 12, "bold")).pack(side=tk.LEFT, padx=(50, 10))
+        
+        scale_val = tk.DoubleVar(value=tgt_sprite["scale"])
+        
+        def on_scale_change(val):
+            s = float(val)
+            render_sprite(cv_tgt, tgt_sprite, s, is_ref=False)
+            
+        scale_slider = tk.Scale(bottom_frame, variable=scale_val, from_=0.1, to=2.0, resolution=0.01, orient=tk.HORIZONTAL, length=400, command=on_scale_change)
+        scale_slider.pack(side=tk.LEFT)
+        
+        def save_scale():
+            new_s = scale_val.get()
+            self.sprites[selected_index]["scale"] = new_s
+            # Update treeview
+            file_path = tgt_sprite["path"]
+            r = tgt_sprite["rows"]
+            c = tgt_sprite["cols"]
+            self.tree.item(selected_item, values=(file_path, r, c, new_s))
+            dlg.destroy()
+            
+        btn_save = tk.Button(bottom_frame, text="Сохранить", command=save_scale, bg="#2196F3", fg="white", font=("Arial", 12, "bold"), padx=30, pady=10)
+        btn_save.pack(side=tk.RIGHT, padx=50)
+        
+        # Initial render of target
+        render_sprite(cv_tgt, tgt_sprite, scale_val.get(), is_ref=False)
 
         
     def delete_sprite(self):
