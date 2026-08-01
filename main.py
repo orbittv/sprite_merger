@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from PIL import Image
+from PIL import Image, ImageTk
 import os
 
 class SpriteMergerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Sprite Sheet Merger")
-        self.root.geometry("1200x800")
+        self.root.geometry("1280x1024")
         
         # Data structure to hold loaded sprites
         self.sprites = [] # List of dicts: {path, rows, cols, scale}
@@ -86,27 +86,168 @@ class SpriteMergerApp:
         
     def open_add_dialog(self, file_path):
         dlg = tk.Toplevel(self.root)
-        dlg.title("Параметры нарезки")
-        dlg.geometry("450x300")
+        dlg.title("Добавление спрайта и предпросмотр")
+        dlg.geometry("1280x1024")
         dlg.grab_set() # Make modal
-        dlg.resizable(False, False)
         
-        tk.Label(dlg, text=f"Файл: {os.path.basename(file_path)}", font=("Arial", 10, "bold")).pack(pady=15)
+        # Center the dialog based on main root window
+        self.root.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 640
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 512
+        dlg.geometry(f"+{x}+{y}")
         
-        frame = tk.Frame(dlg)
-        frame.pack(pady=10)
+        try:
+            original_img = Image.open(file_path).convert("RGBA")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось загрузить изображение:\n{e}")
+            dlg.destroy()
+            return
+            
+        # Left Frame: Preview
+        left_frame = tk.Frame(dlg)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        tk.Label(frame, text="Кол-во строк:", font=("Arial", 10)).grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+        info_label = tk.Label(left_frame, text="Размер кадра: 0x0 px", font=("Arial", 10, "bold"))
+        info_label.pack(side=tk.TOP, anchor=tk.W, pady=(0, 5))
+        
+        # Navigation Frame
+        nav_frame = tk.Frame(left_frame)
+        nav_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
+        
+        preview_state = {"current_frame": 0}
+        
+        def prev_frame():
+            preview_state["current_frame"] = max(0, preview_state["current_frame"] - 1)
+            update_preview(reset_frame=False)
+            
+        def next_frame():
+            try:
+                r = rows_var.get()
+                c = cols_var.get()
+                total = r * c
+                preview_state["current_frame"] = min(total - 1, preview_state["current_frame"] + 1)
+                update_preview(reset_frame=False)
+            except:
+                pass
+                
+        btn_prev = tk.Button(nav_frame, text="< Пред. кадр", command=prev_frame, font=("Arial", 9))
+        btn_prev.pack(side=tk.LEFT, padx=(0, 10))
+        
+        btn_next = tk.Button(nav_frame, text="След. кадр >", command=next_frame, font=("Arial", 9))
+        btn_next.pack(side=tk.LEFT)
+        
+        canvas_frame = tk.Frame(left_frame)
+        canvas_frame.pack(fill=tk.BOTH, expand=True)
+        
+        h_scroll = tk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
+        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        v_scroll = tk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Gray background to easily see transparency bounds
+        canvas = tk.Canvas(canvas_frame, xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set, bg="#e0e0e0")
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        h_scroll.config(command=canvas.xview)
+        v_scroll.config(command=canvas.yview)
+        
+        # Right Frame: Settings
+        right_frame = tk.Frame(dlg, width=300)
+        right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
+        
+        tk.Label(right_frame, text="Параметры нарезки", font=("Arial", 12, "bold")).pack(pady=(0, 20))
+        tk.Label(right_frame, text=f"Файл:\n{os.path.basename(file_path)}", font=("Arial", 10), justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 20))
+        
+        inputs_frame = tk.Frame(right_frame)
+        inputs_frame.pack(fill=tk.X)
+        
+        tk.Label(inputs_frame, text="Кол-во строк:", font=("Arial", 10)).grid(row=0, column=0, padx=5, pady=10, sticky=tk.W)
         rows_var = tk.IntVar(value=1)
-        tk.Entry(frame, textvariable=rows_var, width=15, font=("Arial", 10)).grid(row=0, column=1, padx=10, pady=10)
+        tk.Entry(inputs_frame, textvariable=rows_var, width=10, font=("Arial", 10)).grid(row=0, column=1, padx=5, pady=10)
         
-        tk.Label(frame, text="Кол-во столбцов:", font=("Arial", 10)).grid(row=1, column=0, padx=10, pady=10, sticky=tk.W)
+        tk.Label(inputs_frame, text="Кол-во столбцов:", font=("Arial", 10)).grid(row=1, column=0, padx=5, pady=10, sticky=tk.W)
         cols_var = tk.IntVar(value=1)
-        tk.Entry(frame, textvariable=cols_var, width=15, font=("Arial", 10)).grid(row=1, column=1, padx=10, pady=10)
+        tk.Entry(inputs_frame, textvariable=cols_var, width=10, font=("Arial", 10)).grid(row=1, column=1, padx=5, pady=10)
         
-        tk.Label(frame, text="Коэф. масштаба:", font=("Arial", 10)).grid(row=2, column=0, padx=10, pady=10, sticky=tk.W)
+        tk.Label(inputs_frame, text="Коэф. масштаба:", font=("Arial", 10)).grid(row=2, column=0, padx=5, pady=10, sticky=tk.W)
         scale_var = tk.DoubleVar(value=1.0)
-        tk.Entry(frame, textvariable=scale_var, width=15, font=("Arial", 10)).grid(row=2, column=1, padx=10, pady=10)
+        tk.Entry(inputs_frame, textvariable=scale_var, width=10, font=("Arial", 10)).grid(row=2, column=1, padx=5, pady=10)
+        
+        def update_preview(reset_frame=True):
+            try:
+                r = rows_var.get()
+                c = cols_var.get()
+                s = scale_var.get()
+            except tk.TclError:
+                if reset_frame:
+                    messagebox.showerror("Ошибка", "Введите корректные числовые значения")
+                return
+                
+            if r <= 0 or c <= 0 or s <= 0:
+                if reset_frame:
+                    messagebox.showerror("Ошибка", "Значения должны быть больше 0")
+                return
+                
+            total = r * c
+            if reset_frame or preview_state["current_frame"] >= total:
+                preview_state["current_frame"] = 0
+                
+            frame_idx = preview_state["current_frame"]
+            
+            frame_w = original_img.width // c
+            frame_h = original_img.height // r
+            
+            s_col = frame_idx % c
+            s_row = frame_idx // c
+            
+            # Get the current frame
+            frame_img = original_img.crop((s_col * frame_w, s_row * frame_h, (s_col + 1) * frame_w, (s_row + 1) * frame_h))
+            
+            # Scale frame
+            if s != 1.0:
+                new_size = (int(frame_w * s), int(frame_h * s))
+                resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+                frame_img = frame_img.resize(new_size, resample_filter)
+                
+            scaled_w = frame_img.width
+            scaled_h = frame_img.height
+            
+            # Find useful image bounding box using alpha channel
+            alpha = frame_img.split()[-1]
+            bbox = alpha.getbbox()
+            
+            frame_title = f"Кадр {frame_idx + 1} (синий)"
+            
+            if bbox:
+                useful_w = bbox[2] - bbox[0]
+                useful_h = bbox[3] - bbox[1]
+                info_text = f"Спрайтшит: {original_img.width}x{original_img.height} px | {frame_title}: {scaled_w}x{scaled_h} px | Спрайт (зелёный): {useful_w}x{useful_h} px"
+            else:
+                info_text = f"Спрайтшит: {original_img.width}x{original_img.height} px | {frame_title}: {scaled_w}x{scaled_h} px | Спрайт: пустой"
+                
+            info_label.config(text=info_text)
+            
+            # Update canvas
+            photo = ImageTk.PhotoImage(frame_img)
+            canvas.delete("all")
+            canvas.create_image(0, 0, image=photo, anchor=tk.NW)
+            canvas.image = photo # Keep reference
+            
+            # Draw blue border around the whole frame
+            canvas.create_rectangle(0, 0, scaled_w, scaled_h, outline="blue", width=2)
+            
+            if bbox:
+                # Draw green rectangle (bbox = left, upper, right, lower)
+                canvas.create_rectangle(bbox[0], bbox[1], bbox[2], bbox[3], outline="#00ff00", width=2)
+                
+            # Update scroll region
+            canvas.config(scrollregion=(0, 0, scaled_w, scaled_h))
+            
+        btn_update = tk.Button(inputs_frame, text="Обновить превью", command=lambda: update_preview(reset_frame=True), bg="#FF9800", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5)
+        btn_update.grid(row=3, column=0, columnspan=2, pady=15)
+        
+        # Initial preview call
+        update_preview()
         
         def confirm():
             try:
@@ -129,8 +270,8 @@ class SpriteMergerApp:
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Некорректные параметры: {e}")
                 
-        btn_confirm = tk.Button(dlg, text="Добавить в список", command=confirm, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), padx=20, pady=5)
-        btn_confirm.pack(pady=15)
+        btn_confirm = tk.Button(right_frame, text="Добавить в список", command=confirm, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), padx=20, pady=10)
+        btn_confirm.pack(side=tk.BOTTOM, pady=20)
         
     def delete_sprite(self):
         selected_items = self.tree.selection()
@@ -205,7 +346,6 @@ class SpriteMergerApp:
                         # Scale the frame if needed
                         if scale != 1.0:
                             new_size = (int(src_frame_w * scale), int(src_frame_h * scale))
-                            # Using LANCZOS for general high quality. If pixel art is blurry, NEAREST could be added as an option.
                             resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
                             frame_img = frame_img.resize(new_size, resample_filter)
                         
