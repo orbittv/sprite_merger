@@ -63,23 +63,48 @@ class SpriteMergerApp:
         
         # Params Grid
         param_frame = tk.Frame(bottom_frame)
-        param_frame.pack(side=tk.LEFT)
+        param_frame.pack(side=tk.LEFT, fill=tk.Y)
         
-        tk.Label(param_frame, text="Ширина вых. кадра (px):", font=("Arial", 10)).grid(row=0, column=0, padx=5, sticky=tk.W)
+        input_row = tk.Frame(param_frame)
+        input_row.pack(anchor=tk.W)
+        
+        tk.Label(input_row, text="Ширина вых. кадра (px):", font=("Arial", 10)).grid(row=0, column=0, padx=5, sticky=tk.W)
         self.out_width_var = tk.IntVar(value=560)
-        tk.Entry(param_frame, textvariable=self.out_width_var, width=10, font=("Arial", 10)).grid(row=0, column=1, padx=5)
+        tk.Entry(input_row, textvariable=self.out_width_var, width=10, font=("Arial", 10)).grid(row=0, column=1, padx=5)
         
-        tk.Label(param_frame, text="Высота вых. кадра (px):", font=("Arial", 10)).grid(row=0, column=2, padx=15, sticky=tk.W)
+        tk.Label(input_row, text="Высота вых. кадра (px):", font=("Arial", 10)).grid(row=0, column=2, padx=15, sticky=tk.W)
         self.out_height_var = tk.IntVar(value=740)
-        tk.Entry(param_frame, textvariable=self.out_height_var, width=10, font=("Arial", 10)).grid(row=0, column=3, padx=5)
+        tk.Entry(input_row, textvariable=self.out_height_var, width=10, font=("Arial", 10)).grid(row=0, column=3, padx=5)
         
-        tk.Label(param_frame, text="Количество столбцов:", font=("Arial", 10)).grid(row=0, column=4, padx=15, sticky=tk.W)
+        tk.Label(input_row, text="Кол-во кадров в строке:", font=("Arial", 10)).grid(row=0, column=4, padx=15, sticky=tk.W)
         self.out_cols_var = tk.IntVar(value=16)
-        tk.Entry(param_frame, textvariable=self.out_cols_var, width=10, font=("Arial", 10)).grid(row=0, column=5, padx=5)
+        tk.Entry(input_row, textvariable=self.out_cols_var, width=10, font=("Arial", 10)).grid(row=0, column=5, padx=5)
+        
+        self.canvas_size_label = tk.Label(param_frame, text="Итоговый размер холста нового спрайтшита: 0x0 px", font=("Arial", 10, "bold"), fg="#555")
+        self.canvas_size_label.pack(anchor=tk.W, pady=(10, 0), padx=5)
+        
+        self.out_width_var.trace_add("write", self.update_canvas_size_label)
+        self.out_height_var.trace_add("write", self.update_canvas_size_label)
+        self.out_cols_var.trace_add("write", self.update_canvas_size_label)
         
         btn_save = tk.Button(bottom_frame, text="Сохранить", command=self.save_sprite, bg="#2196F3", fg="white", font=("Arial", 12, "bold"), padx=30, pady=10)
         btn_save.pack(side=tk.RIGHT, padx=20)
         
+        btn_calc = tk.Button(bottom_frame, text="Вычислить", command=self.calc_output_params, bg="#00BCD4", fg="white", font=("Arial", 12, "bold"), padx=20, pady=10)
+        btn_calc.pack(side=tk.RIGHT, padx=5)
+        
+    def update_canvas_size_label(self, *args):
+        try:
+            w = self.out_width_var.get()
+            h = self.out_height_var.get()
+            cols = self.out_cols_var.get()
+            rows = len(self.sprites)
+            total_w = w * cols
+            total_h = h * rows
+            self.canvas_size_label.config(text=f"Итоговый размер холста нового спрайтшита: {total_w}x{total_h} px")
+        except:
+            self.canvas_size_label.config(text="Итоговый размер холста нового спрайтшита: Неизвестно")
+
     def add_sprite(self):
         file_path = filedialog.askopenfilename(
             title="Выберите спрайтшит",
@@ -280,6 +305,7 @@ class SpriteMergerApp:
                     })
                     self.tree.insert("", tk.END, values=(file_path, r, c, s))
                 dlg.destroy()
+                self.update_canvas_size_label()
                 
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Некорректные параметры: {e}")
@@ -314,12 +340,14 @@ class SpriteMergerApp:
             index = self.tree.index(item)
             self.sprites.pop(index)
             self.tree.delete(item)
+            
+        self.update_canvas_size_label()
 
-    def get_max_useful_height(self, sprite_info, scale=1.0):
+    def get_max_useful_bounds(self, sprite_info, scale=1.0):
         try:
             img = Image.open(sprite_info["path"]).convert("RGBA")
         except Exception:
-            return 0
+            return 0, 0
             
         r = sprite_info["rows"]
         c = sprite_info["cols"]
@@ -327,6 +355,7 @@ class SpriteMergerApp:
         frame_w = img.width // c
         frame_h = img.height // r
         
+        max_w = 0
         max_h = 0
         for i in range(total):
             s_col = i % c
@@ -335,11 +364,40 @@ class SpriteMergerApp:
             alpha = frame_img.split()[-1]
             bbox = alpha.getbbox()
             if bbox:
+                w = bbox[2] - bbox[0]
                 h = bbox[3] - bbox[1]
+                if w > max_w:
+                    max_w = w
                 if h > max_h:
                     max_h = h
                     
-        return max_h * scale
+        return max_w * scale, max_h * scale
+
+    def calc_output_params(self):
+        if not self.sprites:
+            messagebox.showwarning("Внимание", "Список спрайтов пуст!")
+            return
+            
+        global_max_w = 0
+        global_max_h = 0
+        max_cols = 0
+        
+        for sprite_info in self.sprites:
+            total_frames = sprite_info["rows"] * sprite_info["cols"]
+            max_cols = max(max_cols, total_frames)
+            w, h = self.get_max_useful_bounds(sprite_info, scale=sprite_info["scale"])
+            global_max_w = max(global_max_w, w)
+            global_max_h = max(global_max_h, h)
+            
+        if global_max_w > 0 and global_max_h > 0:
+            new_w = int(global_max_w + 40)
+            new_h = int(global_max_h + 40)
+            self.out_width_var.set(new_w)
+            self.out_height_var.set(new_h)
+            self.out_cols_var.set(max_cols)
+            messagebox.showinfo("Готово", f"Параметры успешно вычислены:\nШирина кадра: {new_w} px\nВысота кадра: {new_h} px\nМакс. столбцов: {max_cols}")
+        else:
+            messagebox.showerror("Ошибка", "Не удалось вычислить размеры. Возможно, спрайты пустые.")
 
     def sync_scales(self):
         if len(self.sprites) < 2:
@@ -348,7 +406,7 @@ class SpriteMergerApp:
             
         # 1. Get reference max height from the first row
         ref_sprite = self.sprites[0]
-        ref_h = self.get_max_useful_height(ref_sprite, scale=ref_sprite["scale"])
+        _, ref_h = self.get_max_useful_bounds(ref_sprite, scale=ref_sprite["scale"])
         
         if ref_h <= 0:
             messagebox.showerror("Ошибка", "Первый спрайтшит пустой или некорректный. Невозможно вычислить эталонную высоту.")
@@ -358,7 +416,7 @@ class SpriteMergerApp:
         updated_count = 0
         for i in range(1, len(self.sprites)):
             sprite_info = self.sprites[i]
-            curr_h = self.get_max_useful_height(sprite_info, scale=1.0) # unscaled
+            _, curr_h = self.get_max_useful_bounds(sprite_info, scale=1.0) # unscaled
             
             if curr_h > 0:
                 new_scale = round(ref_h / curr_h, 3)
