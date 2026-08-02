@@ -377,13 +377,33 @@ class SpriteMergerApp:
         cv_tgt = tk.Canvas(canvas_frame, width=cv_w, height=cv_h, bg="#333", relief=tk.SUNKEN, bd=2)
         cv_tgt.pack(side=tk.RIGHT, padx=10, pady=10, expand=True)
         
+        def draw_grid_and_ruler(canvas):
+            # Draw 10px dashed grid lines
+            for i in range(0, cv_w, 10):
+                canvas.create_line(i, 0, i, cv_h, fill="#4a4a4a", dash=(1, 3), tags="grid")
+            for i in range(0, cv_h, 10):
+                canvas.create_line(0, i, cv_w, i, fill="#4a4a4a", dash=(1, 3), tags="grid")
+            
+            # Draw rulers
+            for i in range(0, cv_w, 50):
+                if i > 0:
+                    canvas.create_line(i, 0, i, 15, fill="#aaa", width=2, tags="ruler")
+                    canvas.create_text(i, 22, text=str(i), fill="#ccc", font=("Arial", 8), tags="ruler")
+            for i in range(0, cv_h, 50):
+                if i > 0:
+                    canvas.create_line(0, i, 15, i, fill="#aaa", width=2, tags="ruler")
+                    canvas.create_text(25, i, text=str(i), fill="#ccc", font=("Arial", 8), tags="ruler")
+
+        draw_grid_and_ruler(cv_ref)
+        draw_grid_and_ruler(cv_tgt)
+        
         # Draw floor line
         floor_y = cv_h - 20
         cv_ref.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
         cv_tgt.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
         
         # Labels on canvas
-        cv_ref.create_text(cv_w // 2, 30, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
+        cv_ref.create_text(cv_w // 2, 45, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
         
         # Store photo images to prevent garbage collection
         dlg.photo_ref = None
@@ -434,7 +454,9 @@ class SpriteMergerApp:
                     canvas.create_image(0, 0, image=dlg.photo_tgt, anchor=tk.NW, tags="sprite")
                     # Update label
                     canvas.delete("tgt_label")
-                    canvas.create_text(cv_w // 2, 30, text=f"Настраиваемый (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="tgt_label")
+                    canvas.create_text(cv_w // 2, 45, text=f"Настраиваемый (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="tgt_label")
+                    
+                canvas.tag_lower("sprite")
             else:
                 if not is_ref:
                     canvas.delete("tgt_label")
