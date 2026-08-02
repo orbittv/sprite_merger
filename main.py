@@ -402,6 +402,14 @@ class SpriteMergerApp:
         cv_ref.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
         cv_tgt.create_line(0, floor_y, cv_w, floor_y, fill="#00ff00", dash=(4, 4), tags="floor")
         
+        # Draw center lines
+        center_x = cv_w // 2
+        center_y = cv_h // 2
+        cv_ref.create_line(center_x, 0, center_x, cv_h, fill="red", dash=(4, 4), tags="center")
+        cv_ref.create_line(0, center_y, cv_w, center_y, fill="red", dash=(4, 4), tags="center")
+        cv_tgt.create_line(center_x, 0, center_x, cv_h, fill="red", dash=(4, 4), tags="center")
+        cv_tgt.create_line(0, center_y, cv_w, center_y, fill="red", dash=(4, 4), tags="center")
+        
         # Labels on canvas
         cv_ref.create_text(cv_w // 2, 45, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
         
