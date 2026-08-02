@@ -428,11 +428,31 @@ class SpriteMergerApp:
                 for key in ["h1", "h2", "h3", "h4"]:
                     y = dlg.guides[key]["y"]
                     c.create_line(0, y, cv_w, y, fill="#00BFFF", width=2, tags=("guide", f"guide_{key}"))
+                    num = key[1]
+                    c.create_text(25, y - 10, text=num, fill="#00BFFF", font=("Arial", 10, "bold"), tags=("guide", f"guide_{key}"))
                 
                 # Vertical guides
                 for key in ["v1", "v2"]:
                     x = dlg.guides[key]["x"]
                     c.create_line(x, 0, x, cv_h, fill="#00BFFF", width=2, tags=("guide", f"guide_{key}"))
+                    num = key[1]
+                    c.create_text(x - 10, 25, text=num, fill="#00BFFF", font=("Arial", 10, "bold"), tags=("guide", f"guide_{key}"))
+                # Distances
+                dist_h1_h2 = abs(dlg.guides["h2"]["y"] - dlg.guides["h1"]["y"])
+                dist_v1_v2 = abs(dlg.guides["v2"]["x"] - dlg.guides["v1"]["x"])
+                
+                tl_x = min(dlg.guides["v1"]["x"], dlg.guides["v2"]["x"])
+                
+                # First box top-left
+                tl_y1 = min(dlg.guides["h1"]["y"], dlg.guides["h2"]["y"])
+                c.create_text(tl_x + 5, tl_y1 + 5, text=f"↔ {int(dist_v1_v2)}px", fill="#FF9800", font=("Arial", 10, "bold"), anchor=tk.NW, tags="guide")
+                c.create_text(tl_x + 5, tl_y1 + 20, text=f"↕ {int(dist_h1_h2)}px", fill="#FF9800", font=("Arial", 10, "bold"), anchor=tk.NW, tags="guide")
+
+                # Second box top-left
+                dist_h3_h4 = abs(dlg.guides["h4"]["y"] - dlg.guides["h3"]["y"])
+                tl_y2 = min(dlg.guides["h3"]["y"], dlg.guides["h4"]["y"])
+                c.create_text(tl_x + 5, tl_y2 + 5, text=f"↔ {int(dist_v1_v2)}px", fill="#FF9800", font=("Arial", 10, "bold"), anchor=tk.NW, tags="guide")
+                c.create_text(tl_x + 5, tl_y2 + 20, text=f"↕ {int(dist_h3_h4)}px", fill="#FF9800", font=("Arial", 10, "bold"), anchor=tk.NW, tags="guide")
                 
         draw_guides()
         
