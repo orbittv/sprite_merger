@@ -376,8 +376,36 @@ class SpriteMergerApp:
         dlg.geometry(f"+{x}+{y}")
         
         # Layout
-        top_label = tk.Label(dlg, text="Слева — эталон (1-я строка), справа — настраиваемый спрайт", font=("Arial", 14, "bold"), pady=10)
-        top_label.pack()
+        top_frame = tk.Frame(dlg)
+        top_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
+        
+        ref_top = tk.Frame(top_frame, width=600, height=40)
+        ref_top.pack_propagate(False)
+        ref_top.pack(side=tk.LEFT, padx=10, expand=True)
+        
+        tgt_top = tk.Frame(top_frame, width=600, height=40)
+        tgt_top.pack_propagate(False)
+        tgt_top.pack(side=tk.RIGHT, padx=10, expand=True)
+
+        dlg.ref_frame = 0
+        dlg.tgt_frame = 0
+
+        def change_ref_frame(delta):
+            total = ref_sprite["rows"] * ref_sprite["cols"]
+            dlg.ref_frame = (dlg.ref_frame + delta) % total
+            render_sprite(cv_ref, ref_sprite, ref_sprite["scale"], is_ref=True, frame_idx=dlg.ref_frame)
+            
+        def change_tgt_frame(delta):
+            total = tgt_sprite["rows"] * tgt_sprite["cols"]
+            dlg.tgt_frame = (dlg.tgt_frame + delta) % total
+            # We use scale_val.get() which is defined below, but evaluated lazily
+            render_sprite(cv_tgt, tgt_sprite, scale_val.get(), is_ref=False, frame_idx=dlg.tgt_frame)
+
+        tk.Button(ref_top, text="◀", font=("Arial", 14), command=lambda: change_ref_frame(-1)).pack(side=tk.LEFT, expand=True, anchor=tk.E, padx=10)
+        tk.Button(ref_top, text="▶", font=("Arial", 14), command=lambda: change_ref_frame(1)).pack(side=tk.RIGHT, expand=True, anchor=tk.W, padx=10)
+        
+        tk.Button(tgt_top, text="◀", font=("Arial", 14), command=lambda: change_tgt_frame(-1)).pack(side=tk.LEFT, expand=True, anchor=tk.E, padx=10)
+        tk.Button(tgt_top, text="▶", font=("Arial", 14), command=lambda: change_tgt_frame(1)).pack(side=tk.RIGHT, expand=True, anchor=tk.W, padx=10)
         
         canvas_frame = tk.Frame(dlg, bg="#222")
         canvas_frame.pack(fill=tk.BOTH, expand=True, padx=20)
@@ -508,14 +536,13 @@ class SpriteMergerApp:
                 c.tag_bind(f"guide_{key}", "<Leave>", lambda e, can=c: can.config(cursor=""))
         
         
-        # Labels on canvas
-        cv_ref.create_text(cv_w // 2, 45, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
+        # Labels on canvas (handled inside render_sprite now)
         
         # Store photo images to prevent garbage collection
         dlg.photo_ref = None
         dlg.photo_tgt = None
         
-        def render_sprite(canvas, sprite_info, current_scale, is_ref=False):
+        def render_sprite(canvas, sprite_info, current_scale, is_ref=False, frame_idx=0):
             try:
                 img = Image.open(sprite_info["path"]).convert("RGBA")
             except Exception:
@@ -527,8 +554,10 @@ class SpriteMergerApp:
             src_frame_w = img.width // c
             src_frame_h = img.height // r
             
-            # Crop first frame
-            frame_img = img.crop((0, 0, src_frame_w, src_frame_h))
+            # Crop specific frame
+            s_col = frame_idx % c
+            s_row = frame_idx // c
+            frame_img = img.crop((s_col * src_frame_w, s_row * src_frame_h, (s_col + 1) * src_frame_w, (s_row + 1) * src_frame_h))
             
             # Scale
             if current_scale != 1.0:
@@ -539,8 +568,10 @@ class SpriteMergerApp:
             alpha = frame_img.split()[-1]
             bbox = alpha.getbbox()
             
-            # Clear old image (tag "sprite")
+            # Clear old image and label
             canvas.delete("sprite")
+            tag_label = "ref_label" if is_ref else "tgt_label"
+            canvas.delete(tag_label)
             
             if bbox:
                 bbox_w = bbox[2] - bbox[0]
@@ -555,21 +586,19 @@ class SpriteMergerApp:
                 if is_ref:
                     dlg.photo_ref = photo
                     canvas.create_image(0, 0, image=dlg.photo_ref, anchor=tk.NW, tags="sprite")
+                    canvas.create_text(cv_w // 2, 45, text=f"Эталон: кадр {frame_idx + 1} (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="ref_label")
                 else:
                     dlg.photo_tgt = photo
                     canvas.create_image(0, 0, image=dlg.photo_tgt, anchor=tk.NW, tags="sprite")
-                    # Update label
-                    canvas.delete("tgt_label")
-                    canvas.create_text(cv_w // 2, 45, text=f"Настраиваемый (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="tgt_label")
+                    canvas.create_text(cv_w // 2, 45, text=f"Настраиваемый: кадр {frame_idx + 1} (Scale: {current_scale:.3f})", fill="white", font=("Arial", 14, "bold"), tags="tgt_label")
                     
                 canvas.tag_lower("sprite")
             else:
-                if not is_ref:
-                    canvas.delete("tgt_label")
-                    canvas.create_text(cv_w // 2, 30, text=f"Пустой кадр (Scale: {current_scale:.3f})", fill="red", font=("Arial", 14, "bold"), tags="tgt_label")
+                prefix = "Эталон:" if is_ref else "Настраиваемый:"
+                canvas.create_text(cv_w // 2, 45, text=f"{prefix} Пустой кадр {frame_idx + 1} (Scale: {current_scale:.3f})", fill="red", font=("Arial", 14, "bold"), tags=tag_label)
                     
         # Render reference once
-        render_sprite(cv_ref, ref_sprite, ref_sprite["scale"], is_ref=True)
+        render_sprite(cv_ref, ref_sprite, ref_sprite["scale"], is_ref=True, frame_idx=dlg.ref_frame)
         
         # Bottom controls
         bottom_frame = tk.Frame(dlg, pady=20)
@@ -581,7 +610,7 @@ class SpriteMergerApp:
         
         def on_scale_change(val):
             s = float(val)
-            render_sprite(cv_tgt, tgt_sprite, s, is_ref=False)
+            render_sprite(cv_tgt, tgt_sprite, s, is_ref=False, frame_idx=dlg.tgt_frame)
             
         scale_slider = tk.Scale(bottom_frame, variable=scale_val, from_=0.1, to=2.0, resolution=0.01, orient=tk.HORIZONTAL, length=400, command=on_scale_change)
         scale_slider.pack(side=tk.LEFT)
@@ -600,7 +629,7 @@ class SpriteMergerApp:
         btn_save.pack(side=tk.RIGHT, padx=50)
         
         # Initial render of target
-        render_sprite(cv_tgt, tgt_sprite, scale_val.get(), is_ref=False)
+        render_sprite(cv_tgt, tgt_sprite, scale_val.get(), is_ref=False, frame_idx=dlg.tgt_frame)
 
         
     def delete_sprite(self):
