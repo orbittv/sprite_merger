@@ -283,6 +283,18 @@ class SpriteMergerApp:
         btn_update = tk.Button(inputs_frame, text="Обновить превью", command=lambda: update_preview(reset_frame=True), bg="#FF9800", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5)
         btn_update.grid(row=3, column=0, columnspan=2, pady=15)
         
+        presets_frame = tk.Frame(inputs_frame)
+        presets_frame.grid(row=4, column=0, columnspan=2, pady=5)
+        
+        def set_preset(n):
+            rows_var.set(n)
+            cols_var.set(n)
+            update_preview(reset_frame=True)
+            
+        for i in range(1, 7):
+            btn = tk.Button(presets_frame, text=f"{i}x{i}", font=("Arial", 9), width=3, bg="#E0E0E0", command=lambda n=i: set_preset(n))
+            btn.pack(side=tk.LEFT, padx=2)
+        
         # Initial preview call
         update_preview()
         
