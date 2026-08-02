@@ -410,6 +410,72 @@ class SpriteMergerApp:
         cv_tgt.create_line(center_x, 0, center_x, cv_h, fill="red", dash=(4, 4), tags="center")
         cv_tgt.create_line(0, center_y, cv_w, center_y, fill="red", dash=(4, 4), tags="center")
         
+        # Draggable Guides
+        dlg.guides = {
+            "h1": {"y": 200},
+            "h2": {"y": 300},
+            "h3": {"y": 400},
+            "h4": {"y": 500},
+            "v1": {"x": 200},
+            "v2": {"x": 400}
+        }
+        
+        def draw_guides():
+            for c in (cv_ref, cv_tgt):
+                c.delete("guide")
+                
+                # Horizontal guides
+                for key in ["h1", "h2", "h3", "h4"]:
+                    y = dlg.guides[key]["y"]
+                    c.create_line(0, y, cv_w, y, fill="#00BFFF", width=2, tags=("guide", f"guide_{key}"))
+                
+                # Vertical guides
+                for key in ["v1", "v2"]:
+                    x = dlg.guides[key]["x"]
+                    c.create_line(x, 0, x, cv_h, fill="#00BFFF", width=2, tags=("guide", f"guide_{key}"))
+                
+        draw_guides()
+        
+        dlg.active_guide = None
+        
+        def on_guide_press(event, canvas):
+            item = canvas.find_withtag("current")
+            if item:
+                tags = canvas.gettags(item[0])
+                for t in tags:
+                    if t.startswith("guide_"):
+                        dlg.active_guide = t
+                        break
+
+        def on_guide_drag(event, canvas):
+            if dlg.active_guide:
+                guide_key = dlg.active_guide[6:]
+                if guide_key == "h4":
+                    return # h4 is not manually draggable
+                    
+                if guide_key.startswith("h"):
+                    dlg.guides[guide_key]["y"] = max(0, min(cv_h, event.y))
+                    # Update h4: distance between h3 and h4 equals distance between h1 and h2
+                    dlg.guides["h4"]["y"] = dlg.guides["h3"]["y"] + (dlg.guides["h2"]["y"] - dlg.guides["h1"]["y"])
+                elif guide_key.startswith("v"):
+                    dlg.guides[guide_key]["x"] = max(0, min(cv_w, event.x))
+                draw_guides()
+                
+        def on_guide_release(event):
+            dlg.active_guide = None
+
+        for c in (cv_ref, cv_tgt):
+            c.tag_bind("guide", "<ButtonPress-1>", lambda e, can=c: on_guide_press(e, can))
+            c.bind("<B1-Motion>", lambda e, can=c: on_guide_drag(e, can))
+            c.bind("<ButtonRelease-1>", lambda e: on_guide_release(e))
+            for key in ["h1", "h2", "h3"]:
+                c.tag_bind(f"guide_{key}", "<Enter>", lambda e, can=c: can.config(cursor="sb_v_double_arrow"))
+                c.tag_bind(f"guide_{key}", "<Leave>", lambda e, can=c: can.config(cursor=""))
+            for key in ["v1", "v2"]:
+                c.tag_bind(f"guide_{key}", "<Enter>", lambda e, can=c: can.config(cursor="sb_h_double_arrow"))
+                c.tag_bind(f"guide_{key}", "<Leave>", lambda e, can=c: can.config(cursor=""))
+        
+        
         # Labels on canvas
         cv_ref.create_text(cv_w // 2, 45, text=f"Эталон (Scale: {ref_sprite['scale']})", fill="white", font=("Arial", 14, "bold"))
         
