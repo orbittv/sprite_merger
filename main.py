@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import os
+import csv
 
 class SpriteMergerApp:
     def __init__(self, root):
@@ -33,6 +34,12 @@ class SpriteMergerApp:
         
         btn_manual_scale = tk.Button(top_frame, text="Подгонка scale", command=self.open_manual_scale_dialog, font=("Arial", 10, "bold"), bg="#E91E63", fg="white", padx=10, pady=5)
         btn_manual_scale.pack(side=tk.LEFT, padx=10)
+        
+        btn_save_csv = tk.Button(top_frame, text="💾 Сохранить", command=self.save_csv, font=("Arial", 10), bg="#2196F3", fg="white", padx=10, pady=5)
+        btn_save_csv.pack(side=tk.RIGHT, padx=10)
+        
+        btn_open_csv = tk.Button(top_frame, text="📂 Открыть", command=self.load_csv, font=("Arial", 10), bg="#FFC107", fg="black", padx=10, pady=5)
+        btn_open_csv.pack(side=tk.RIGHT, padx=5)
         
         # Middle Frame - Treeview
         mid_frame = tk.Frame(self.root)
@@ -107,6 +114,81 @@ class SpriteMergerApp:
             self.canvas_size_label.config(text=f"Итоговый размер холста нового спрайтшита: {total_w}x{total_h} px")
         except:
             self.canvas_size_label.config(text="Итоговый размер холста нового спрайтшита: Неизвестно")
+
+    def save_csv(self):
+        if not self.sprites:
+            messagebox.showwarning("Внимание", "Список спрайтов пуст.")
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Сохранить список спрайтов"
+        )
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Путь", "Строки", "Столбцы", "Масштаб"])
+                for s in self.sprites:
+                    writer.writerow([s["path"], s["rows"], s["cols"], s["scale"]])
+            messagebox.showinfo("Успех", f"Список успешно сохранён в файл:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить файл:\n{e}")
+
+    def load_csv(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Открыть список спрайтов"
+        )
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader, None) # Skip header
+                loaded_sprites = []
+                for row in reader:
+                    if len(row) >= 5:
+                        # Old format with filename
+                        path = row[1]
+                        rows = int(row[2])
+                        cols = int(row[3])
+                        scale = float(row[4])
+                    elif len(row) >= 4:
+                        # New format without filename
+                        path = row[0]
+                        rows = int(row[1])
+                        cols = int(row[2])
+                        scale = float(row[3])
+                    else:
+                        continue
+                        
+                    loaded_sprites.append({
+                        "path": path,
+                        "rows": rows,
+                        "cols": cols,
+                        "scale": scale
+                    })
+            
+            # Clear existing list
+            self.sprites.clear()
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+                
+            # Add loaded items
+            for s in loaded_sprites:
+                self.sprites.append(s)
+                self.tree.insert("", tk.END, values=(os.path.basename(s["path"]), s["rows"], s["cols"], s["scale"]))
+                
+            self.update_canvas_size_label()
+            messagebox.showinfo("Успех", f"Загружено спрайтов: {len(loaded_sprites)}")
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть файл:\n{e}")
 
     def add_sprite(self):
         file_path = filedialog.askopenfilename(
