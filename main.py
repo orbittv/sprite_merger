@@ -608,12 +608,20 @@ class SpriteMergerApp:
         
         scale_val = tk.DoubleVar(value=tgt_sprite["scale"])
         
-        def on_scale_change(val):
-            s = float(val)
-            render_sprite(cv_tgt, tgt_sprite, s, is_ref=False, frame_idx=dlg.tgt_frame)
+        def on_scale_change(*args):
+            try:
+                s = scale_val.get()
+                render_sprite(cv_tgt, tgt_sprite, s, is_ref=False, frame_idx=dlg.tgt_frame)
+            except tk.TclError:
+                pass
+                
+        scale_val.trace_add("write", on_scale_change)
             
-        scale_slider = tk.Scale(bottom_frame, variable=scale_val, from_=0.1, to=2.0, resolution=0.01, orient=tk.HORIZONTAL, length=400, command=on_scale_change)
+        scale_slider = tk.Scale(bottom_frame, variable=scale_val, from_=0.1, to=3.0, resolution=0.01, orient=tk.HORIZONTAL, length=800)
         scale_slider.pack(side=tk.LEFT)
+        
+        scale_entry = tk.Entry(bottom_frame, textvariable=scale_val, width=6, font=("Arial", 12))
+        scale_entry.pack(side=tk.LEFT, padx=20)
         
         def save_scale():
             new_s = scale_val.get()
