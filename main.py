@@ -90,12 +90,25 @@ class SpriteMergerApp:
         self.out_cols_var = tk.IntVar(value=16)
         tk.Entry(input_row, textvariable=self.out_cols_var, width=10, font=("Arial", 10)).grid(row=0, column=5, padx=5)
         
+        input_row2 = tk.Frame(param_frame)
+        input_row2.pack(anchor=tk.W, pady=(5, 0))
+        
+        self.use_custom_rows_var = tk.BooleanVar(value=False)
+        chk_custom_rows = tk.Checkbutton(input_row2, text="Задать фиксированное кол-во строк:", variable=self.use_custom_rows_var, command=self.toggle_custom_rows, font=("Arial", 10))
+        chk_custom_rows.grid(row=0, column=0, sticky=tk.W)
+        
+        self.out_rows_var = tk.IntVar(value=1)
+        self.entry_out_rows = tk.Entry(input_row2, textvariable=self.out_rows_var, width=10, font=("Arial", 10), state=tk.DISABLED)
+        self.entry_out_rows.grid(row=0, column=1, padx=5)
+
         self.canvas_size_label = tk.Label(param_frame, text="Итоговый размер холста нового спрайтшита: 0x0 px", font=("Arial", 10, "bold"), fg="#555")
         self.canvas_size_label.pack(anchor=tk.W, pady=(10, 0), padx=5)
         
         self.out_width_var.trace_add("write", self.update_canvas_size_label)
         self.out_height_var.trace_add("write", self.update_canvas_size_label)
         self.out_cols_var.trace_add("write", self.update_canvas_size_label)
+        self.out_rows_var.trace_add("write", self.update_canvas_size_label)
+        self.use_custom_rows_var.trace_add("write", self.update_canvas_size_label)
         
         btn_save = tk.Button(bottom_frame, text="Сохранить", command=self.save_sprite, bg="#2196F3", fg="white", font=("Arial", 12, "bold"), padx=30, pady=10)
         btn_save.pack(side=tk.RIGHT, padx=20)
@@ -103,12 +116,21 @@ class SpriteMergerApp:
         btn_calc = tk.Button(bottom_frame, text="Вычислить", command=self.calc_output_params, bg="#00BCD4", fg="white", font=("Arial", 12, "bold"), padx=20, pady=10)
         btn_calc.pack(side=tk.RIGHT, padx=5)
         
+    def toggle_custom_rows(self):
+        if self.use_custom_rows_var.get():
+            self.entry_out_rows.config(state=tk.NORMAL)
+        else:
+            self.entry_out_rows.config(state=tk.DISABLED)
+
     def update_canvas_size_label(self, *args):
         try:
             w = self.out_width_var.get()
             h = self.out_height_var.get()
             cols = self.out_cols_var.get()
-            rows = len(self.sprites)
+            if self.use_custom_rows_var.get():
+                rows = self.out_rows_var.get()
+            else:
+                rows = len(self.sprites)
             total_w = w * cols
             total_h = h * rows
             self.canvas_size_label.config(text=f"Итоговый размер холста нового спрайтшита: {total_w}x{total_h} px")
@@ -831,8 +853,15 @@ class SpriteMergerApp:
             out_h = self.out_height_var.get()
             out_cols = self.out_cols_var.get()
             
-            if out_w <= 0 or out_h <= 0 or out_cols <= 0:
-                raise ValueError("Размеры и количество столбцов должны быть больше 0")
+            if self.use_custom_rows_var.get():
+                num_rows = self.out_rows_var.get()
+                use_grid_layout = True
+            else:
+                num_rows = len(self.sprites)
+                use_grid_layout = False
+                
+            if out_w <= 0 or out_h <= 0 or out_cols <= 0 or num_rows <= 0:
+                raise ValueError("Размеры, количество столбцов и строк должны быть больше 0")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Некорректные параметры вывода: {e}")
             return
@@ -846,9 +875,10 @@ class SpriteMergerApp:
             return
             
         try:
-            num_rows = len(self.sprites)
             # Create a transparent RGBA image for the output
             result_img = Image.new("RGBA", (out_w * out_cols, out_h * num_rows), (0, 0, 0, 0))
+            
+            global_frame_idx = 0
             
             for row_idx, sprite_info in enumerate(self.sprites):
                 try:
@@ -865,45 +895,58 @@ class SpriteMergerApp:
                 src_frame_h = img.height // src_rows
                 
                 total_src_frames = src_rows * src_cols
+                frames_to_process = total_src_frames if use_grid_layout else min(out_cols, total_src_frames)
                 
-                for col_idx in range(out_cols):
-                    if col_idx < total_src_frames:
-                        # Find the corresponding col and row in the source image
-                        s_col = col_idx % src_cols
-                        s_row = col_idx // src_cols
+                for i in range(frames_to_process):
+                    if use_grid_layout:
+                        out_row_idx = global_frame_idx // out_cols
+                        out_col_idx = global_frame_idx % out_cols
+                    else:
+                        out_row_idx = row_idx
+                        out_col_idx = i
                         
-                        box = (
-                            s_col * src_frame_w,
-                            s_row * src_frame_h,
-                            (s_col + 1) * src_frame_w,
-                            (s_row + 1) * src_frame_h
-                        )
-                        frame_img = img.crop(box)
+                    if out_row_idx >= num_rows:
+                        break # Stop if we ran out of space in the output grid
                         
-                        # Scale the frame if needed
-                        if scale != 1.0:
-                            new_size = (int(src_frame_w * scale), int(src_frame_h * scale))
-                            resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
-                            frame_img = frame_img.resize(new_size, resample_filter)
+                    # Find the corresponding col and row in the source image
+                    s_col = i % src_cols
+                    s_row = i // src_cols
+                    
+                    box = (
+                        s_col * src_frame_w,
+                        s_row * src_frame_h,
+                        (s_col + 1) * src_frame_w,
+                        (s_row + 1) * src_frame_h
+                    )
+                    frame_img = img.crop(box)
+                    
+                    # Scale the frame if needed
+                    if scale != 1.0:
+                        new_size = (int(src_frame_w * scale), int(src_frame_h * scale))
+                        resample_filter = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+                        frame_img = frame_img.resize(new_size, resample_filter)
+                    
+                    # Get bbox to align the useful image
+                    alpha = frame_img.split()[-1]
+                    bbox = alpha.getbbox()
+                    
+                    if bbox:
+                        # Горизонтально: центрируем именно полезное изображение (bbox)
+                        bbox_w = bbox[2] - bbox[0]
+                        pos_x = out_col_idx * out_w + (out_w - bbox_w) // 2 - bbox[0]
                         
-                        # Get bbox to align the useful image
-                        alpha = frame_img.split()[-1]
-                        bbox = alpha.getbbox()
-                        
-                        if bbox:
-                            # Горизонтально: центрируем именно полезное изображение (bbox)
-                            bbox_w = bbox[2] - bbox[0]
-                            pos_x = col_idx * out_w + (out_w - bbox_w) // 2 - bbox[0]
-                            
-                            # Вертикально: выравниваем полезное изображение по низу кадра с отступом 20 px
-                            pos_y = row_idx * out_h + out_h - 20 - bbox[3]
-                        else:
-                            # Если кадр пустой (полностью прозрачный)
-                            pos_x = col_idx * out_w + (out_w - frame_img.width) // 2
-                            pos_y = row_idx * out_h + (out_h - frame_img.height) // 2
-                        
-                        # Paste into result using the frame itself as a mask to preserve transparency
-                        result_img.paste(frame_img, (pos_x, pos_y), frame_img)
+                        # Вертикально: выравниваем полезное изображение по низу кадра с отступом 20 px
+                        pos_y = out_row_idx * out_h + out_h - 20 - bbox[3]
+                    else:
+                        # Если кадр пустой (полностью прозрачный)
+                        pos_x = out_col_idx * out_w + (out_w - frame_img.width) // 2
+                        pos_y = out_row_idx * out_h + (out_h - frame_img.height) // 2
+                    
+                    # Paste into result using the frame itself as a mask to preserve transparency
+                    result_img.paste(frame_img, (pos_x, pos_y), frame_img)
+                    
+                    if use_grid_layout:
+                        global_frame_idx += 1
                         
             result_img.save(save_path, "PNG")
             messagebox.showinfo("Успех", f"Спрайтшит успешно сохранен!\n\nРазмер файла: {result_img.width}x{result_img.height} px\nПуть: {save_path}")
